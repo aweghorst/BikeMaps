@@ -1,0 +1,1632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VeloCore Navigator</title>
+<style>
+  :root { color-scheme: light; }
+  .app {
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --border:         rgba(11,11,11,0.10);
+    --good:           #0ca30c;
+    --warning:        #fab219;
+    --critical:       #d03b3b;
+    --power:          #2a78d6;
+    --cadence:        #eb6834;
+    --gmaps-blue:     #4285F4;
+    --card-shadow:    0 1px 2px rgba(11,11,11,0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .app {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --border:         rgba(255,255,255,0.10);
+      --critical:       #e66767;
+      --power:          #3987e5;
+      --cadence:        #d95926;
+      --card-shadow:    0 1px 2px rgba(0,0,0,0.4);
+    }
+  }
+  :root[data-theme="dark"] .app {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --border:         rgba(255,255,255,0.10);
+    --critical:       #e66767;
+    --power:          #3987e5;
+    --cadence:        #d95926;
+    --card-shadow:    0 1px 2px rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; font-family: system-ui,-apple-system,"Segoe UI",sans-serif; }
+  /* .app owns background + text color for its whole subtree; html/body must NOT reference
+     .app-scoped custom properties (they're ancestors, not descendants, so var() lookups here
+     would silently fall back to light/black regardless of the active theme). */
+  .app { min-height: 100vh; display: flex; flex-direction: column; background: var(--page); color: var(--text-primary); position: relative; }
+  .theme-toggle { border:1px solid var(--border); background:transparent; color:var(--text-secondary); border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer; }
+
+  header.top { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border); background:var(--surface-1); flex-wrap: wrap; gap:8px; }
+  header.top h1 { font-size:16px; margin:0; font-weight:600; }
+  header.top .sub { font-size:11px; color:var(--text-muted); }
+
+  .status-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .status-dot { width:8px; height:8px; border-radius:50%; background:var(--text-muted); }
+  .status-dot.connected { background: var(--good); }
+  .status-dot.reconnecting { background: var(--warning); animation: pulse 1s infinite; }
+  .status-dot.error { background: var(--critical); }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.35;} }
+  .status-label { font-size:12px; color: var(--text-secondary); }
+
+  button.btn { font-family: inherit; font-size:12.5px; font-weight:500; cursor:pointer; border-radius:7px; padding:7px 12px; border:1px solid var(--border); background:var(--surface-1); color:var(--text-primary); }
+  button.btn.primary { background: var(--gmaps-blue); border-color: var(--gmaps-blue); color:#fff; }
+  button.btn.ghost { background: transparent; }
+  button.btn:disabled { opacity:.45; cursor:not-allowed; }
+  button.btn.small { padding:4px 9px; font-size:11.5px; }
+
+  .route-bar { display:flex; gap:8px; padding:10px 16px; background:var(--surface-1); border-bottom:1px solid var(--border); flex-wrap:wrap; align-items:center; }
+  .route-bar input[type=text] { flex:1; min-width:140px; font-family:inherit; font-size:13px; padding:8px 10px; border-radius:7px; border:1px solid var(--border); background:var(--page); color:var(--text-primary); }
+  .pac-wrap { flex:1; min-width:140px; display:flex; }
+  gmp-place-autocomplete {
+    flex: 1; width: 100%;
+    font-family: inherit; font-size: 13px;
+    border: 1px solid var(--border); border-radius: 7px;
+    background-color: var(--page); color: var(--text-primary);
+  }
+  .route-bar .route-msg { width:100%; font-size:12px; color:var(--text-muted); }
+
+  .map-wrap { position:relative; flex:1; min-height: 380px; display:flex; }
+  #map { flex:1; min-width:0; background: var(--page); }
+
+  .route-panel { width:96px; flex:none; background:var(--surface-1); border-left:1px solid var(--border); }
+  .route-panel svg { width:100%; height:100%; display:block; }
+  .route-panel .pin-label { font-size:9px; fill:var(--text-muted); }
+
+  .resume-banner { position:absolute; top:10px; left:10px; right:10px; z-index:500; background: var(--surface-1); border:1px solid var(--border); color:var(--text-primary); border-radius:12px; padding:12px 14px; box-shadow:0 4px 14px rgba(0,0,0,.25); display:none; align-items:center; gap:10px; flex-wrap:wrap; }
+  .resume-banner .txt { flex:1; min-width:200px; font-size:13px; }
+  .resume-banner .txt b { display:block; font-size:13.5px; margin-bottom:2px; }
+
+  .key-overlay { position:absolute; inset:0; z-index:1000; background: var(--page); display:flex; align-items:center; justify-content:center; padding:20px; }
+  .key-card { max-width:440px; background:var(--surface-1); border:1px solid var(--border); border-radius:14px; padding:22px; box-shadow:var(--card-shadow); }
+  .key-card h2 { margin:0 0 8px; font-size:16px; }
+  .key-card p { font-size:12.5px; color:var(--text-secondary); line-height:1.6; margin:0 0 10px; }
+  .key-card ol { font-size:12.5px; color:var(--text-secondary); line-height:1.7; padding-left:18px; margin:0 0 14px; }
+  .key-card input[type=text] { width:100%; font-family: ui-monospace, monospace; font-size:12.5px; padding:9px 10px; border-radius:7px; border:1px solid var(--border); background:var(--page); color:var(--text-primary); margin-bottom:10px; }
+  .key-card .row { display:flex; gap:8px; }
+  .key-card .err { color: var(--critical); font-size:12px; margin-top:8px; display:none; }
+
+  .stats-strip { display:flex; gap:0; background:var(--surface-1); border-top:1px solid var(--border); }
+  .stats-strip .stat { flex:1; text-align:center; padding:10px 6px; border-right:1px solid var(--border); }
+  .stats-strip .stat:last-child { border-right:none; }
+  .stats-strip .stat .v { font-size:18px; font-weight:600; }
+  .stats-strip .stat .v.power { color: var(--power); }
+  .stats-strip .stat .v.cadence { color: var(--cadence); }
+  .stats-strip .stat .l { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.03em; margin-top:2px; }
+
+  .source-note { text-align:center; font-size:11px; color:var(--text-muted); padding:0 16px 8px; background:var(--surface-1); }
+
+  .controls-row { display:flex; align-items:center; gap:10px; padding:8px 16px; background:var(--surface-1); border-top:1px solid var(--border); flex-wrap:wrap; font-size:12px; color:var(--text-secondary); }
+  .controls-row label { display:flex; align-items:center; gap:5px; }
+  .controls-row input[type=number] { width:64px; font-family:inherit; font-size:12px; padding:4px 6px; border-radius:5px; border:1px solid var(--border); background:var(--page); color:var(--text-primary); }
+
+  details.explorer { background:var(--surface-1); border-top:1px solid var(--border); padding:10px 16px; }
+  details.explorer summary { cursor:pointer; font-size:12.5px; font-weight:600; }
+  .explorer-log { background: var(--page); border:1px solid var(--border); border-radius:8px; padding:8px; font-family: ui-monospace, monospace; font-size:11px; height:120px; overflow-y:auto; color:var(--text-secondary); margin-top:8px; white-space:pre-wrap; }
+
+  footer.notes { padding: 10px 16px 20px; font-size:11.5px; color:var(--text-muted); line-height:1.6; background:var(--surface-1); }
+
+  .tab-strip { display:flex; gap:4px; padding:8px 16px 0; background:var(--surface-1); border-bottom:1px solid var(--border); }
+  .tab-btn { font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; border:none; background:transparent; color:var(--text-muted); padding:9px 14px; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .tab-btn.active { color:var(--text-primary); border-bottom-color:var(--gmaps-blue); }
+
+  .rides-view { padding:16px; max-width:720px; margin:0 auto; width:100%; }
+  .rides-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .rides-toolbar h2 { font-size:15px; margin:0; }
+  .ride-card { display:flex; justify-content:space-between; align-items:center; gap:10px; background:var(--surface-1); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:8px; }
+  .ride-card-info b { display:block; font-size:14px; margin-bottom:2px; }
+  .ride-card-info span { font-size:12px; color:var(--text-secondary); }
+  .ride-card-actions { display:flex; gap:6px; flex:none; }
+  .rides-empty { font-size:13px; color:var(--text-muted); }
+
+  .create-ride-form label.field { display:block; font-size:12.5px; color:var(--text-secondary); margin:12px 0 4px; }
+  .create-ride-form input[type=text] { width:100%; font-family:inherit; font-size:13px; padding:8px 10px; border-radius:7px; border:1px solid var(--border); background:var(--page); color:var(--text-primary); }
+  .create-ride-form .pac-row { display:flex; gap:8px; }
+  .create-ride-form .pac-row .pac-wrap { flex:1; }
+  #createRideMap { width:100%; height:320px; border-radius:10px; border:1px solid var(--border); margin-top:8px; }
+  .create-ride-hint { font-size:11.5px; color:var(--text-muted); margin-top:6px; }
+  .waypoint-list { margin-top:6px; }
+  .waypoint-row { display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--text-secondary); padding:6px 0; border-bottom:1px solid var(--border); }
+  .waypoint-empty { font-size:12px; color:var(--text-muted); }
+  .create-ride-actions { display:flex; gap:8px; margin-top:14px; }
+  .create-ride-msg { font-size:12px; color:var(--text-muted); margin-top:8px; min-height:14px; }
+  .create-ride-msg.error { color:var(--critical); }
+  .rides-msg { font-size:12px; color:var(--text-muted); margin:-6px 0 12px; }
+  .rides-msg.error { color:var(--critical); }
+  .ride-card-select { flex:none; display:flex; align-items:center; padding-right:2px; }
+  .ride-card-select input { width:16px; height:16px; }
+
+  .session-strip { display:none; align-items:center; gap:6px; padding:8px 16px; background:var(--surface-1); border-bottom:1px solid var(--border); }
+  .session-nav-btn { flex:none; font-size:16px; line-height:1; border:1px solid var(--border); background:var(--page); color:var(--text-primary); border-radius:7px; width:30px; height:30px; cursor:pointer; }
+  .session-chips { flex:1; display:flex; gap:8px; overflow-x:auto; scroll-snap-type:x proximity; padding:2px; }
+  .session-chip { scroll-snap-align:center; flex:none; min-width:140px; text-align:left; font-family:inherit; cursor:pointer; border:1px solid var(--border); background:var(--page); color:var(--text-primary); border-radius:9px; padding:7px 10px; display:flex; flex-direction:column; gap:4px; }
+  .session-chip.active { border-color:var(--gmaps-blue); box-shadow:0 0 0 1px var(--gmaps-blue); }
+  .session-chip.arrived .session-chip-pct { color:var(--good); }
+  .session-chip-name { font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .session-chip-pct { font-size:11px; color:var(--text-muted); }
+  .session-chip-bar { display:block; height:4px; border-radius:2px; background:var(--gridline); overflow:hidden; }
+  .session-chip-bar span { display:block; height:100%; background:var(--gmaps-blue); }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="top">
+    <div>
+      <h1>VeloCore Navigator</h1>
+      <div class="sub">Google Maps navigation view, paced by your pedaling &mdash; not GPS</div>
+    </div>
+    <div class="status-row">
+      <div class="status-dot" id="statusDot"></div>
+      <div class="status-label" id="statusLabel">Bike not connected</div>
+      <button class="btn primary" id="connectBikeBtn">Connect Bike</button>
+      <button class="btn ghost" id="connectAllBtn" title="Use if 'Connect Bike' can't find your VeloCore">Show All Devices</button>
+      <button class="btn ghost" id="cameraModeBtn" title="Switch between overview and behind-the-vehicle chase view">Overview</button>
+      <button class="btn ghost" id="changeKeyBtn" title="Change your Google Maps API key or Map ID">Settings</button>
+      <button class="theme-toggle" id="themeToggle">Dark mode</button>
+    </div>
+  </header>
+
+  <div class="tab-strip">
+    <button class="tab-btn active" id="tabNavigatorBtn" data-tab="navigator">Navigator</button>
+    <button class="tab-btn" id="tabRidesBtn" data-tab="rides">Rides</button>
+  </div>
+
+  <div id="navigatorView">
+  <div class="route-bar" id="routeBar">
+    <div id="fromInputWrap" class="pac-wrap"></div>
+    <div id="toInputWrap" class="pac-wrap"></div>
+    <button class="btn primary" id="getRouteBtn">Get Route</button>
+    <button class="btn ghost small" id="resetRouteBtn">Reset</button>
+    <div class="route-msg" id="routeMsg">Enter a start and destination, then Get Route.</div>
+  </div>
+
+  <div class="session-strip" id="sessionStrip">
+    <button class="session-nav-btn" id="sessionPrevBtn" title="Previous ride">&lsaquo;</button>
+    <div class="session-chips" id="sessionChips"></div>
+    <button class="session-nav-btn" id="sessionNextBtn" title="Next ride">&rsaquo;</button>
+    <button class="btn ghost small" id="resetRouteBtnSession" title="Reset progress for this session">Reset</button>
+  </div>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+
+    <div class="route-panel" id="routePanel">
+      <svg id="routePanelSvg" viewBox="0 0 100 400" preserveAspectRatio="xMidYMid meet">
+        <path id="routePanelRemaining" fill="none" stroke="#4285F4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+        <path id="routePanelTraveled" fill="none" stroke="#5f6368" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+        <circle id="routePanelEnd" r="4" fill="#34A853" stroke="#fff" stroke-width="1.5"></circle>
+        <circle id="routePanelStart" r="4" fill="#34A853" stroke="#fff" stroke-width="1.5"></circle>
+        <path id="routePanelDot" d="M 0,-6 L 4,4.5 L 0,2 L -4,4.5 Z" fill="#EA4335" stroke="#fff" stroke-width="1.2"></path>
+      </svg>
+    </div>
+
+    <div class="resume-banner" id="resumeBanner">
+      <div class="txt">
+        <b id="resumeTitle">Resume your last ride?</b>
+        <span id="resumeDetail"></span>
+      </div>
+      <button class="btn primary small" id="resumeBtn">Resume</button>
+      <button class="btn ghost small" id="discardResumeBtn">Discard</button>
+    </div>
+
+    <div class="key-overlay" id="keyOverlay">
+      <div class="key-card">
+        <h2>Connect your Google Maps API key</h2>
+        <p>This app uses Google's free, no-credit-card "Demo Key" for maps, address search, and routing. The key is
+          tied to your Google account and stays saved only in this browser &mdash; it's never sent anywhere else.</p>
+        <ol>
+          <li>Click "Get a key" below (opens Google's page in a new tab)</li>
+          <li>Sign in with your Google Account and accept the terms</li>
+          <li>Copy the key it generates and paste it here</li>
+        </ol>
+        <div class="row" style="margin-bottom:10px;">
+          <button class="btn primary" id="openKeyPageBtn" style="flex:1;">Get a key</button>
+        </div>
+        <input type="text" id="apiKeyInput" placeholder="Paste your API key here">
+
+        <p style="margin-top:14px;"><b style="color:var(--text-primary);">Optional — Map ID</b> for the behind-the-vehicle
+          chase view (tilted, rotates to face your direction of travel). Without one, the map stays flat and just
+          follows you top-down. Free to create in Google Cloud Console; if it doesn't work with a Demo Key project,
+          the app falls back to the flat follow view automatically.</p>
+        <div class="row" style="margin-bottom:10px;">
+          <button class="btn ghost" id="openMapIdPageBtn" style="flex:1;">How do I get a Map ID?</button>
+        </div>
+        <input type="text" id="mapIdInput" placeholder="Paste your Map ID here (optional)">
+
+        <p style="margin-top:14px;"><b style="color:var(--text-primary);">Optional — Default map location.</b> Where
+          the map opens before you connect the bike or search a route. Leave this blank to use your browser's
+          location automatically (you'll get a one-time permission prompt); set it here to skip that prompt and
+          always open in the same place instead.</p>
+        <div class="row" style="margin-bottom:10px;">
+          <input type="text" id="defaultLocInput" placeholder="e.g. Chicago, IL or a full address" style="flex:1;">
+          <button class="btn ghost" id="useMyLocationBtn" type="button">Use my location</button>
+        </div>
+
+        <button class="btn primary" id="saveKeyBtn" style="width:100%;">Save &amp; Continue</button>
+        <div class="err" id="keyError"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats-strip">
+    <div class="stat"><div class="v power" id="statPower">&mdash;</div><div class="l">Power (W)</div></div>
+    <div class="stat"><div class="v cadence" id="statCadence">&mdash;</div><div class="l">Cadence</div></div>
+    <div class="stat"><div class="v" id="statSpeed">&mdash;</div><div class="l" id="lblSpeed">Speed</div></div>
+    <div class="stat"><div class="v" id="statDist">0.0</div><div class="l" id="lblDist">Traveled</div></div>
+    <div class="stat"><div class="v" id="statRemain">&mdash;</div><div class="l">Remaining</div></div>
+    <div class="stat"><div class="v" id="statEta">&mdash;</div><div class="l">ETA</div></div>
+  </div>
+  <div class="source-note" id="sourceNote" style="display:none;"></div>
+
+  <div class="controls-row">
+    <label><input type="checkbox" id="voiceToggle"> Announce arrival</label>
+    <label><input type="checkbox" id="followToggle" checked> Auto-switch to chase view when pedaling starts</label>
+    <label><input type="checkbox" id="unitsToggle"> Use kilometers</label>
+    <label>Rider weight <input type="number" id="weightInput" value="180" min="60" max="400"> lbs (used only when estimating speed from power)</label>
+    <label>Test power (no bike needed) <input type="number" id="testPowerInput" value="0" min="0" max="500"> W</label>
+  </div>
+
+  <details class="explorer">
+    <summary>Bluetooth device explorer (for troubleshooting)</summary>
+    <p style="font-size:12px;color:var(--text-secondary);margin:8px 0 0;">If Power/Cadence never update after connecting, use this to see exactly what your bike broadcasts.</p>
+    <button class="btn small" id="exploreBtn" style="margin-top:6px;">Connect &amp; list services</button>
+    <div id="serviceList"></div>
+    <div class="explorer-log" id="explorerLog">Waiting for a device&hellip;</div>
+  </details>
+
+  <footer class="notes">
+    Requires Chrome or Edge (desktop or Android) for the bike connection &mdash; Web Bluetooth isn't supported in Safari or
+    Firefox. Distance travelled comes from your bike's own reported speed when available, or is otherwise estimated
+    from your power output using a simple outdoor-cycling physics model &mdash; a reasonable approximation, not a
+    precise measurement. Routes are recomputed fresh each time (including on resume) rather than stored long-term,
+    per Google's terms of service &mdash; only your start/destination and progress are saved locally in this browser
+    so you can pick up where you left off. Nothing is sent anywhere except Google's mapping APIs; your bike data
+    never leaves this tab.
+  </footer>
+  </div>
+
+  <div id="ridesView" class="rides-view" style="display:none;">
+    <div id="rideSelectionPage">
+      <div class="rides-toolbar">
+        <h2>Your Rides</h2>
+        <div style="display:flex; gap:8px;">
+          <button class="btn primary" id="startSessionBtn" disabled>Start Session</button>
+          <button class="btn primary" id="createRideBtn">+ Create a Ride</button>
+        </div>
+      </div>
+      <div class="rides-msg" id="ridesMsg">Check the box on 2 or more Rides to progress them together — swipe or use the arrows on the Navigator tab to switch between them while they all keep counting your distance.</div>
+      <div id="ridesList"></div>
+    </div>
+
+    <div id="createRidePage" class="create-ride-form" style="display:none;">
+      <div class="rides-toolbar">
+        <h2>Create a Ride</h2>
+        <button class="btn ghost" id="cancelRideBtn">Cancel</button>
+      </div>
+
+      <label class="field" for="rideNameInput">Ride name</label>
+      <input type="text" id="rideNameInput" placeholder="e.g. Lakefront Loop">
+
+      <label class="field">Start address</label>
+      <div class="pac-row"><div id="rideFromInputWrap" class="pac-wrap"></div></div>
+
+      <label class="field">Destination address</label>
+      <div class="pac-row"><div id="rideToInputWrap" class="pac-wrap"></div></div>
+
+      <label class="field">Midpoints (optional)</label>
+      <div class="create-ride-hint">Click anywhere on the map to add a waypoint. Drag a waypoint to fine-tune it, or click it again to remove it.</div>
+      <div id="createRideMap"></div>
+      <div class="waypoint-list" id="waypointList"></div>
+
+      <div class="create-ride-actions">
+        <button class="btn primary" id="saveRideBtn">Save Ride</button>
+      </div>
+      <div class="create-ride-msg" id="createRideMsg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  function logLine(msg) {
+    const el = $("explorerLog");
+    el.textContent = "[" + new Date().toLocaleTimeString() + "] " + msg + "\n" + el.textContent;
+    if (el.textContent.length > 20000) el.textContent = el.textContent.slice(0, 20000);
+  }
+  function toHex(dv) {
+    let out = [];
+    for (let i = 0; i < dv.byteLength; i++) out.push(dv.getUint8(i).toString(16).padStart(2, "0"));
+    return out.join(" ");
+  }
+
+  // ---------------- Theme ----------------
+  const rootEl = document.documentElement;
+  const themeBtn = $("themeToggle");
+  let theme = null;
+  themeBtn.addEventListener("click", () => {
+    if (theme === "dark") theme = "light";
+    else if (theme === "light") theme = null;
+    else theme = "dark";
+    if (theme) rootEl.setAttribute("data-theme", theme); else rootEl.removeAttribute("data-theme");
+    themeBtn.textContent = theme === "dark" ? "Light mode" : theme === "light" ? "Auto mode" : "Dark mode";
+  });
+
+  // ---------------- Safe localStorage wrapper ----------------
+  const storage = {
+    available: (function () {
+      try { const k = "__velocore_test__"; localStorage.setItem(k, "1"); localStorage.removeItem(k); return true; }
+      catch (e) { return false; }
+    })(),
+    get(key) { if (!this.available) return null; try { return localStorage.getItem(key); } catch (e) { return null; } },
+    set(key, val) { if (!this.available) return; try { localStorage.setItem(key, val); } catch (e) {} },
+    remove(key) { if (!this.available) return; try { localStorage.removeItem(key); } catch (e) {} },
+  };
+  const KEY_STORAGE = "velocoreNavApiKey";
+  const MAPID_STORAGE = "velocoreNavMapId";
+  const RESUME_STORAGE = "velocoreNavResumeState";
+  const DEFAULTLOC_STORAGE = "velocoreNavDefaultLoc";
+  const RIDES_STORAGE = "velocoreNavRides";
+
+  // ---------------- Units ----------------
+  function useKm() { return $("unitsToggle").checked; }
+  function metersToDisplay(m) {
+    if (useKm()) return (m / 1000).toFixed(2) + " km";
+    return (m / 1609.34).toFixed(2) + " mi";
+  }
+  function mpsToSpeedDisplay(mps) {
+    if (useKm()) return (mps * 3.6).toFixed(1) + " km/h";
+    return (mps * 2.23694).toFixed(1) + " mph";
+  }
+
+  // ================= Google Maps bootstrap =================
+  let apiKey = storage.get(KEY_STORAGE) || "";
+  let mapId = storage.get(MAPID_STORAGE) || "";
+  let map, fromEl, toEl;
+  let isVectorMap = false;
+  let fromPlace = null, toPlace = null; // {lat, lng, label}
+  let activeWaypoints = []; // [{lat, lng}] — intermediates for the route currently loaded/loading
+
+  // ---------------- Rides (saved start/end/waypoint definitions) ----------------
+  let rides = [];
+  try { rides = JSON.parse(storage.get(RIDES_STORAGE) || "[]"); } catch (e) { rides = []; }
+  if (!Array.isArray(rides)) rides = [];
+  let ridesViewInitialized = false;
+  let rideFromEl = null, rideToEl = null;
+  let rideFromPlace = null, rideToPlace = null;
+  let createRideMap = null;
+  let currentRideWaypoints = []; // [{lat, lng, marker}] — being built on the Create-a-Ride map
+  let selectedRideIds = new Set(); // checked in the Ride Selection list, feeds "Start Session"
+
+  // ---------------- Concurrent session (multiple Rides progressing off one shared odometer) ----------------
+  // Only the FOCUSED entry gets live map overlays/camera — swiping (or the prev/next arrows) swaps
+  // which entry is focused. Every entry's distance/arrival is still recomputed on every tick
+  // regardless of focus, since they all share the same real distanceTravelledM odometer.
+  let session = null; // null | { entries: [{ride, path, cumDist, totalDistanceM, hasArrived, cameraMode, hasStartedMoving}], focusIndex }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  let routePath = [];           // array of google.maps.LatLng, decoded polyline
+  let cumDist = [];             // cumulative meters at each path point
+  let totalDistanceM = 0;
+  let routeLayer = null, startMarker = null, endMarker = null, bikeMarker = null;
+
+  // ---------------- Default map location ----------------
+  // Manual override wins outright; otherwise the map opens at FALLBACK_CENTER and asks the
+  // browser for a one-time geolocation fix to recenter on. {lat, lng, label}.
+  const FALLBACK_CENTER = { lat: 41.8781, lng: -87.6298 };
+  let defaultLoc = null;
+  try { defaultLoc = JSON.parse(storage.get(DEFAULTLOC_STORAGE) || "null"); } catch (e) { defaultLoc = null; }
+  if (!defaultLoc || typeof defaultLoc.lat !== "number" || typeof defaultLoc.lng !== "number") defaultLoc = null;
+  let defaultLocCoord = null; // set by "Use my location" so Save doesn't need to re-geocode it
+  function initialMapCenter() { return defaultLoc ? { lat: defaultLoc.lat, lng: defaultLoc.lng } : FALLBACK_CENTER; }
+
+  // ---------------- Camera (overview <-> behind-the-vehicle chase) ----------------
+  let cameraMode = "overview"; // "overview" | "chase"
+  let hasStartedMoving = false;
+  let overviewCam = null; // {lat, lng, zoom} captured after fitBounds settles
+  let liveCam = { ...initialMapCenter(), zoom: 12, heading: 0, tilt: 0 };
+  let targetCam = { ...liveCam };
+
+  window.gm_authFailure = function () {
+    showKeyError("That key didn't authenticate with Google (it may be invalid, restricted, or not enabled for these APIs). Double-check it and try again.");
+  };
+
+  function showKeyOverlay(show) { $("keyOverlay").style.display = show ? "flex" : "none"; }
+  function showKeyError(msg) { const el = $("keyError"); el.textContent = msg; el.style.display = "block"; }
+
+  $("openKeyPageBtn").addEventListener("click", () => window.open("https://developers.google.com/maps/demo-key", "_blank"));
+  $("openMapIdPageBtn").addEventListener("click", () => window.open("https://developers.google.com/maps/documentation/javascript/map-ids/get-map-id", "_blank"));
+  $("changeKeyBtn").addEventListener("click", () => {
+    $("apiKeyInput").value = apiKey;
+    $("mapIdInput").value = mapId;
+    $("defaultLocInput").value = defaultLoc ? defaultLoc.label : "";
+    defaultLocCoord = null;
+    showKeyOverlay(true);
+  });
+
+  // Typing invalidates a coordinate captured via "Use my location" — same pattern as the
+  // route address boxes, so a stale coordinate can't get saved under edited-but-unsubmitted text.
+  $("defaultLocInput").addEventListener("input", () => { defaultLocCoord = null; });
+
+  $("useMyLocationBtn").addEventListener("click", () => {
+    if (!navigator.geolocation) { showKeyError("This browser doesn't support geolocation."); return; }
+    $("useMyLocationBtn").disabled = true;
+    $("useMyLocationBtn").textContent = "Locating…";
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        defaultLocCoord = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        $("defaultLocInput").value = `Current location (${defaultLocCoord.lat.toFixed(4)}, ${defaultLocCoord.lng.toFixed(4)})`;
+        $("keyError").style.display = "none";
+        $("useMyLocationBtn").disabled = false;
+        $("useMyLocationBtn").textContent = "Use my location";
+      },
+      (err) => {
+        showKeyError("Couldn't get your location (" + err.message + "). You can type an address instead.");
+        $("useMyLocationBtn").disabled = false;
+        $("useMyLocationBtn").textContent = "Use my location";
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+    );
+  });
+
+  $("saveKeyBtn").addEventListener("click", async () => {
+    const val = $("apiKeyInput").value.trim();
+    if (!val) { showKeyError("Paste your API key first."); return; }
+    apiKey = val;
+    mapId = $("mapIdInput").value.trim();
+    storage.set(KEY_STORAGE, apiKey);
+    storage.set(MAPID_STORAGE, mapId);
+    $("keyError").style.display = "none";
+
+    const locText = $("defaultLocInput").value.trim();
+    if (!locText) {
+      defaultLoc = null;
+      storage.remove(DEFAULTLOC_STORAGE);
+    } else if (defaultLocCoord) {
+      defaultLoc = { lat: defaultLocCoord.lat, lng: defaultLocCoord.lng, label: locText };
+      storage.set(DEFAULTLOC_STORAGE, JSON.stringify(defaultLoc));
+    } else {
+      $("saveKeyBtn").disabled = true;
+      try {
+        defaultLoc = await textSearchPlace(locText);
+        storage.set(DEFAULTLOC_STORAGE, JSON.stringify(defaultLoc));
+      } catch (e) {
+        // Non-fatal — keep the key/Map ID save and fall back to the browser-geolocation/default
+        // view rather than blocking the whole form on a bad default-location address.
+        defaultLoc = null;
+        storage.remove(DEFAULTLOC_STORAGE);
+        showKeyError(`Default location: ${e.message} — key and Map ID were saved; using the automatic location instead.`);
+      }
+      $("saveKeyBtn").disabled = false;
+    }
+
+    loadGoogleMaps();
+  });
+
+  function loadGoogleMaps() {
+    // Remove any previous attempt so re-entering a key after a failure works cleanly.
+    const old = document.getElementById("gmapsScript");
+    if (old) old.remove();
+    const script = document.createElement("script");
+    script.id = "gmapsScript";
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places,geometry&v=weekly&loading=async&callback=__velocoreInitMap`;
+    script.async = true; script.defer = true;
+    script.onerror = () => showKeyError("Couldn't load Google Maps with that key — check your internet connection and the key value.");
+    document.head.appendChild(script);
+  }
+
+  // Recenters the still-open map on the browser's reported location, if the user grants
+  // permission. Only called when no manual default-location override is set. Non-fatal on
+  // denial/timeout/unsupported browsers — the map just stays on FALLBACK_CENTER.
+  function tryBrowserGeolocation() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        // The permission prompt can sit unanswered for a while, and the page stays interactive
+        // while it does — if the user already got a route loaded (or moved past the overview,
+        // e.g. mid-ride) before this resolves, snapping the camera to "current location" would
+        // yank the view away from what's actually on screen. Once a route exists, this is a no-op.
+        if (routeLayer) return;
+        const c = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        liveCam.lat = c.lat; liveCam.lng = c.lng; liveCam.zoom = 13;
+        targetCam.lat = c.lat; targetCam.lng = c.lng; targetCam.zoom = 13;
+        if (map) map.moveCamera({ center: c, zoom: 13 });
+        logLine("Centered the map on your current location.");
+      },
+      (err) => { logLine("Couldn't get your location (" + err.message + ") — leaving the map on its default view."); },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
+    );
+  }
+
+  window.__velocoreInitMap = function () {
+    showKeyOverlay(false);
+    const mapOpts = {
+      center: initialMapCenter(), zoom: 12,
+      mapTypeId: "roadmap", streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
+      clickableIcons: false,
+    };
+    if (mapId) mapOpts.mapId = mapId;
+    map = new google.maps.Map($("map"), mapOpts);
+
+    // A Map ID is required for the tilted/rotating chase camera (only vector-rendered maps support
+    // heading/tilt). Detect once whether it actually came up as vector — an invalid/non-vector Map ID,
+    // or no Map ID at all, silently renders as the normal flat map, so we check rather than assume.
+    google.maps.event.addListenerOnce(map, "idle", () => {
+      isVectorMap = !!mapId && typeof map.getRenderingType === "function" &&
+        map.getRenderingType() === google.maps.RenderingType.VECTOR;
+      if (mapId && !isVectorMap) {
+        logLine("Map ID didn't produce a vector map — falling back to flat follow view (no rotation/tilt).");
+      }
+      $("cameraModeBtn").disabled = false;
+    });
+
+    // No manual default location saved — fall back to asking the browser for one so the map
+    // opens somewhere useful instead of always defaulting to Chicago.
+    if (!defaultLoc) tryBrowserGeolocation();
+
+    // google.maps.places.Autocomplete (legacy) requires the legacy Places API, which isn't enabled
+    // for new projects — PlaceAutocompleteElement uses Places API (New), which the Demo Key supports.
+    // This callback can fire more than once (e.g. re-saving the key/Map ID in Settings triggers a
+    // fresh script load), so clear any elements from a prior run before creating new ones — otherwise
+    // the old and new PlaceAutocompleteElements stack up side by side in the wrapper.
+    $("fromInputWrap").innerHTML = "";
+    $("toInputWrap").innerHTML = "";
+
+    fromEl = new google.maps.places.PlaceAutocompleteElement();
+    fromEl.placeholder = "Start address";
+    $("fromInputWrap").appendChild(fromEl);
+    fromEl.addEventListener("gmp-select", async ({ placePrediction }) => {
+      const place = placePrediction.toPlace();
+      await place.fetchFields({ fields: ["location", "formattedAddress"] });
+      if (place.location) fromPlace = { lat: place.location.lat(), lng: place.location.lng(), label: place.formattedAddress };
+    });
+    // Retyping after a selection must invalidate the cached place — otherwise a stale/mismatched
+    // fromPlace can get reused (or a valid one incorrectly bypassed) based on brittle text matching.
+    fromEl.addEventListener("input", () => { fromPlace = null; });
+
+    toEl = new google.maps.places.PlaceAutocompleteElement();
+    toEl.placeholder = "Destination address";
+    $("toInputWrap").appendChild(toEl);
+    toEl.addEventListener("gmp-select", async ({ placePrediction }) => {
+      const place = placePrediction.toPlace();
+      await place.fetchFields({ fields: ["location", "formattedAddress"] });
+      if (place.location) toPlace = { lat: place.location.lat(), lng: place.location.lng(), label: place.formattedAddress };
+    });
+    toEl.addEventListener("input", () => { toPlace = null; });
+
+    checkForResumeState();
+  };
+
+  if (apiKey) { showKeyOverlay(false); loadGoogleMaps(); } else { showKeyOverlay(true); }
+
+  // ================= Text Search fallback (when no Autocomplete selection was made) =================
+  // Uses Places API (New) Text Search rather than the classic Geocoding API — the classic API isn't
+  // enabled on Demo Key projects (same "legacy vs. new" split that affected Autocomplete), so it
+  // returns REQUEST_DENIED there. Text Search is in the same "new" family as Autocomplete/Routes,
+  // which the Demo Key does support. Also used to geocode the manual "default map location" setting.
+  async function textSearchPlace(text) {
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "places.location,places.formattedAddress",
+      },
+      body: JSON.stringify({ textQuery: text }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || `Address lookup failed (${res.status})`);
+    if (!data.places || !data.places.length) throw new Error(`Couldn't find "${text}"`);
+    const p = data.places[0];
+    return { lat: p.location.latitude, lng: p.location.longitude, label: p.formattedAddress };
+  }
+
+  async function resolveLocation(inputEl, cachedPlace) {
+    // A place actually selected from the dropdown is trusted as-is — no re-lookup, no text matching
+    // against the input's displayed text (which may not equal the place's formatted address).
+    if (cachedPlace) return cachedPlace;
+    const text = inputEl.value.trim();
+    if (!text) throw new Error("Enter both a start and a destination.");
+    return textSearchPlace(text);
+  }
+
+  // ================= Routes API =================
+  async function fetchRoute(origin, destination, waypoints) {
+    const body = {
+      origin: { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } },
+      destination: { location: { latLng: { latitude: destination.lat, longitude: destination.lng } } },
+      travelMode: "DRIVE",
+      polylineQuality: "HIGH_QUALITY",
+    };
+    // Intermediates preserve order and bend the route through each waypoint, in the order given —
+    // this is how a Ride's midpoints (picked on the Create-a-Ride map) shape the resulting route.
+    if (waypoints && waypoints.length) {
+      body.intermediates = waypoints.map(w => ({ location: { latLng: { latitude: w.lat, longitude: w.lng } } }));
+    }
+    const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || "Routing failed (" + res.status + ")");
+    if (!data.routes || !data.routes.length) throw new Error("No route found between those two points.");
+    return data.routes[0];
+  }
+
+  function buildPathIndex(path) {
+    const cum = [0];
+    for (let i = 1; i < path.length; i++) {
+      cum.push(cum[i - 1] + google.maps.geometry.spherical.computeDistanceBetween(path[i - 1], path[i]));
+    }
+    return cum;
+  }
+  function pointAtDistance(path, cum, targetM) {
+    if (path.length < 2) return { pos: path[0], heading: 0 };
+    if (targetM <= 0) return { pos: path[0], heading: google.maps.geometry.spherical.computeHeading(path[0], path[1]) };
+    const total = cum[cum.length - 1];
+    if (targetM >= total) return { pos: path[path.length - 1], heading: google.maps.geometry.spherical.computeHeading(path[path.length - 2], path[path.length - 1]) };
+    let i = 1;
+    while (i < cum.length && cum[i] < targetM) i++;
+    const segStart = cum[i - 1], segEnd = cum[i];
+    const frac = segEnd > segStart ? (targetM - segStart) / (segEnd - segStart) : 0;
+    const pos = google.maps.geometry.spherical.interpolate(path[i - 1], path[i], frac);
+    const heading = google.maps.geometry.spherical.computeHeading(path[i - 1], path[i]);
+    return { pos, heading };
+  }
+
+  // ================= Camera: overview <-> behind-the-vehicle chase =================
+  function lerpAngle(a, b, t) {
+    const d = (((b - a + 540) % 360) + 360) % 360 - 180; // shortest signed delta, handles 0/360 wraparound
+    return (a + d * t + 360) % 360;
+  }
+  function metersPerPixel(lat, zoom) {
+    return 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+  }
+
+  function setCameraTarget(mode) {
+    cameraMode = mode;
+    $("cameraModeBtn").textContent = mode === "chase" ? "Overview" : "Chase view";
+    if (mode === "overview") {
+      if (overviewCam) targetCam = { ...overviewCam, heading: 0, tilt: 0 };
+    } else {
+      updateChaseTarget();
+    }
+  }
+  function updateChaseTarget() {
+    if (!routePath.length) return;
+    const { pos, heading } = pointAtDistance(routePath, cumDist, distanceTravelledM);
+    const zoom = 18.3;
+    let centerLat = pos.lat(), centerLng = pos.lng();
+    if (isVectorMap) {
+      // Offset the camera's center slightly ahead of the vehicle (along its heading) so the vehicle
+      // renders toward the lower part of the screen with more upcoming road visible — the same
+      // "chase cam" framing mobile nav apps use, rather than dead-centering the marker.
+      const mpp = metersPerPixel(centerLat, zoom);
+      const forwardOffsetM = mpp * 110;
+      const offsetPt = google.maps.geometry.spherical.computeOffset({ lat: centerLat, lng: centerLng }, forwardOffsetM, heading);
+      centerLat = offsetPt.lat(); centerLng = offsetPt.lng();
+    }
+    targetCam = { lat: centerLat, lng: centerLng, zoom, heading: isVectorMap ? heading : 0, tilt: isVectorMap ? 65 : 0 };
+  }
+
+  $("cameraModeBtn").disabled = true; // enabled once the map reports its rendering type
+  $("cameraModeBtn").addEventListener("click", () => setCameraTarget(cameraMode === "chase" ? "overview" : "chase"));
+
+  function animateCamera() {
+    if (map && routePath.length) {
+      const t = 0.12;
+      liveCam.lat += (targetCam.lat - liveCam.lat) * t;
+      liveCam.lng += (targetCam.lng - liveCam.lng) * t;
+      liveCam.zoom += (targetCam.zoom - liveCam.zoom) * t;
+      liveCam.tilt += (targetCam.tilt - liveCam.tilt) * t;
+      liveCam.heading = lerpAngle(liveCam.heading, targetCam.heading, t);
+      if (isVectorMap) {
+        map.moveCamera({ center: { lat: liveCam.lat, lng: liveCam.lng }, zoom: liveCam.zoom, heading: liveCam.heading, tilt: liveCam.tilt });
+      } else {
+        map.setCenter({ lat: liveCam.lat, lng: liveCam.lng });
+        map.setZoom(Math.round(liveCam.zoom));
+      }
+    }
+    requestAnimationFrame(animateCamera);
+  }
+  requestAnimationFrame(animateCamera);
+
+  // ================= Route side panel: true route shape, start at bottom / end at top =================
+  let panelProjected = []; // [{x,y}] in SVG-local units, index-parallel to routePath
+  function buildRoutePanelProjection() {
+    if (routePath.length < 2) { panelProjected = []; return; }
+    const lat0 = routePath[0].lat(), lng0 = routePath[0].lng();
+    const raw = routePath.map(p => {
+      const lat = p.lat(), lng = p.lng();
+      return {
+        x: (lng - lng0) * 111320 * Math.cos(lat0 * Math.PI / 180), // meters east
+        y: (lat - lat0) * 110540,                                   // meters north
+      };
+    });
+    // Rotate so the overall start->end bearing points "up" — start lands near the bottom of the
+    // panel, end near the top, regardless of how the real route bends along the way.
+    const bearing0 = google.maps.geometry.spherical.computeHeading(routePath[0], routePath[routePath.length - 1]) * Math.PI / 180;
+    const cosB = Math.cos(bearing0), sinB = Math.sin(bearing0);
+    const rotated = raw.map(({ x, y }) => ({ x: x * cosB - y * sinB, y: x * sinB + y * cosB }));
+
+    const xs = rotated.map(p => p.x), ys = rotated.map(p => p.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const W = 100, H = 400, PAD = 16;
+    const spanX = Math.max(1, maxX - minX), spanY = Math.max(1, maxY - minY);
+    const scale = Math.min((W - 2 * PAD) / spanX, (H - 2 * PAD) / spanY);
+    const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;
+    panelProjected = rotated.map(({ x, y }) => ({
+      x: W / 2 + (x - midX) * scale,
+      y: H / 2 - (y - midY) * scale, // larger "toward destination" y maps to smaller screen-y (higher/up)
+    }));
+
+    $("routePanelStart").setAttribute("cx", panelProjected[0].x);
+    $("routePanelStart").setAttribute("cy", panelProjected[0].y);
+    $("routePanelEnd").setAttribute("cx", panelProjected[panelProjected.length - 1].x);
+    $("routePanelEnd").setAttribute("cy", panelProjected[panelProjected.length - 1].y);
+  }
+
+  function updateRoutePanel() {
+    if (!panelProjected.length) {
+      $("routePanelTraveled").setAttribute("d", "");
+      $("routePanelRemaining").setAttribute("d", "");
+      $("routePanelDot").setAttribute("opacity", "0");
+      return;
+    }
+    $("routePanelDot").setAttribute("opacity", "1");
+    const target = Math.min(distanceTravelledM, totalDistanceM);
+    let idx = 1;
+    while (idx < cumDist.length && cumDist[idx] < target) idx++;
+    idx = Math.min(idx, panelProjected.length - 1);
+    const segStart = cumDist[idx - 1] ?? 0, segEnd = cumDist[idx] ?? target;
+    const frac = segEnd > segStart ? (target - segStart) / (segEnd - segStart) : 0;
+    const p0 = panelProjected[idx - 1], p1 = panelProjected[idx];
+    const progressPt = { x: p0.x + (p1.x - p0.x) * frac, y: p0.y + (p1.y - p0.y) * frac };
+
+    const toPath = (pts) => pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+    $("routePanelTraveled").setAttribute("d", toPath(panelProjected.slice(0, idx).concat([progressPt])));
+    $("routePanelRemaining").setAttribute("d", toPath([progressPt].concat(panelProjected.slice(idx))));
+    // routePanelDot is an arrow <path> (not a <circle>), so it's positioned via transform rather
+    // than cx/cy. It always points toward the top of the panel — same "toward destination" sense
+    // the panel's rotation already establishes — rather than tracking the route's local heading.
+    $("routePanelDot").setAttribute("transform", `translate(${progressPt.x.toFixed(1)},${progressPt.y.toFixed(1)})`);
+  }
+
+  // Draws whatever is currently in routePath/cumDist/totalDistanceM onto the one shared map —
+  // used both for a plain single-route load and for focusing a different Ride within a concurrent
+  // session, so the two never drift apart. resumeCamera lets a session focus-swap pick back up in
+  // chase view rather than always resetting to overview.
+  function renderRouteOnMap(fromLabel, toLabel, resumeCamera) {
+    if (routeLayer) routeLayer.setMap(null);
+    if (startMarker) startMarker.setMap(null);
+    if (endMarker) endMarker.setMap(null);
+    if (bikeMarker) bikeMarker.setMap(null);
+
+    routeLayer = new google.maps.Polyline({ path: routePath, geodesic: true, strokeColor: "#4285F4", strokeWeight: 5, strokeOpacity: 0.85, map });
+    startMarker = new google.maps.Marker({ position: routePath[0], map, title: "Start: " + fromLabel });
+    endMarker = new google.maps.Marker({ position: routePath[routePath.length - 1], map, title: "Destination: " + toLabel });
+    bikeMarker = new google.maps.Marker({
+      position: routePath[0], map,
+      icon: { path: "M 0,-9 L 6,7 L 0,3 L -6,7 Z", fillColor: "#EA4335", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2, scale: 1.3, rotation: 0, anchor: new google.maps.Point(0, 0) },
+    });
+
+    const bounds = new google.maps.LatLngBounds();
+    routePath.forEach(p => bounds.extend(p));
+    map.fitBounds(bounds, 30);
+
+    // Overview is the starting camera state; capture where fitBounds actually settled so we can
+    // snap back to it later (button, or a fresh route) without recomputing bounds each time.
+    google.maps.event.addListenerOnce(map, "idle", () => {
+      const c = map.getCenter();
+      overviewCam = { lat: c.lat(), lng: c.lng(), zoom: map.getZoom() };
+      liveCam = { ...overviewCam, heading: 0, tilt: 0 };
+      targetCam = { ...liveCam };
+      if (resumeCamera && resumeCamera.cameraMode === "chase" && resumeCamera.hasStartedMoving) {
+        // Swiped back to a session Ride that was already underway — pick chase view back up
+        // instead of dropping it to overview every time you switch away and back.
+        setCameraTarget("chase");
+      }
+    });
+    cameraMode = "overview";
+    hasStartedMoving = resumeCamera ? resumeCamera.hasStartedMoving : false;
+    $("cameraModeBtn").textContent = "Chase view";
+
+    buildRoutePanelProjection();
+  }
+
+  async function loadRoute(skipGeocode) {
+    $("getRouteBtn").disabled = true;
+    try {
+      let origin, destination;
+      if (skipGeocode && fromPlace && toPlace) {
+        origin = fromPlace; destination = toPlace;
+      } else {
+        $("routeMsg").textContent = "Looking up addresses…";
+        origin = await resolveLocation(fromEl, fromPlace);
+        destination = await resolveLocation(toEl, toPlace);
+        fromPlace = origin; toPlace = destination;
+      }
+      $("routeMsg").textContent = activeWaypoints.length ? "Fetching route with waypoints…" : "Fetching route…";
+      const route = await fetchRoute(origin, destination, activeWaypoints);
+
+      routePath = google.maps.geometry.encoding.decodePath(route.polyline.encodedPolyline);
+      cumDist = buildPathIndex(routePath);
+      totalDistanceM = route.distanceMeters || cumDist[cumDist.length - 1];
+
+      // A plain single-route load (typed by hand, or a single Ride's own "Start" button) always
+      // ends any concurrent session — this is a fresh, single-focus trip from here on.
+      session = null;
+
+      renderRouteOnMap(origin.label, destination.label);
+
+      if (!(skipGeocode && distanceTravelledM > 0)) { distanceTravelledM = 0; }
+      lastTickTs = null;
+      updateNavUI();
+      updateRoutePanel();
+      renderSessionStrip();
+      $("routeMsg").textContent = `Route ready: ${metersToDisplay(totalDistanceM)}. Start pedaling.`;
+      saveResumeState();
+    } catch (e) {
+      $("routeMsg").textContent = "Error: " + (e.message || e);
+    } finally {
+      $("getRouteBtn").disabled = false;
+    }
+  }
+  // Typing a route in by hand on this tab is always a plain start->end trip — clear any waypoints
+  // left over from the last Ride you started, so they don't silently bend an unrelated route.
+  $("getRouteBtn").addEventListener("click", () => { activeWaypoints = []; loadRoute(false); });
+  function resetProgress() {
+    // distanceTravelledM is the one shared odometer, so this resets progress for every Ride in
+    // an active session at once — not just whichever one is currently focused.
+    distanceTravelledM = 0; lastTickTs = null; hasArrived = false; hasStartedMoving = false;
+    setCameraTarget("overview");
+    if (session) {
+      session.entries.forEach((e) => { e.hasArrived = false; e.hasStartedMoving = false; e.cameraMode = "overview"; });
+      renderSessionStrip();
+    }
+    if (routePath.length) updateNavUI();
+  }
+  $("resetRouteBtn").addEventListener("click", resetProgress);
+  $("resetRouteBtnSession").addEventListener("click", resetProgress);
+
+  // ================= Resume state (recompute route fresh, restore progress only) =================
+  function saveResumeState() {
+    if (!fromPlace || !toPlace || !routePath.length) return;
+    storage.set(RESUME_STORAGE, JSON.stringify({
+      from: fromEl.value, to: toEl.value,
+      fromPlace, toPlace, waypoints: activeWaypoints, distanceTravelledM, savedAt: Date.now(),
+    }));
+  }
+  function checkForResumeState() {
+    const raw = storage.get(RESUME_STORAGE);
+    if (!raw) return;
+    let state;
+    try { state = JSON.parse(raw); } catch (e) { storage.remove(RESUME_STORAGE); return; }
+    if (!state || !state.fromPlace || !state.toPlace) { storage.remove(RESUME_STORAGE); return; }
+    $("resumeDetail").textContent = `${state.from} → ${state.to} (${metersToDisplay(state.distanceTravelledM || 0)} already traveled)`;
+    $("resumeBanner").style.display = "flex";
+    $("resumeBtn").onclick = async () => {
+      $("resumeBanner").style.display = "none";
+      fromEl.value = state.from; toEl.value = state.to;
+      fromPlace = state.fromPlace; toPlace = state.toPlace;
+      activeWaypoints = Array.isArray(state.waypoints) ? state.waypoints : [];
+      await loadRoute(true);
+      distanceTravelledM = Math.min(state.distanceTravelledM || 0, totalDistanceM);
+      if (distanceTravelledM > 0 && $("followToggle").checked) { hasStartedMoving = true; setCameraTarget("chase"); }
+      updateNavUI();
+    };
+    $("discardResumeBtn").onclick = () => { storage.remove(RESUME_STORAGE); $("resumeBanner").style.display = "none"; };
+  }
+
+  // ================= Tabs (Navigator <-> Rides) =================
+  function switchTab(name) {
+    const isNav = name === "navigator";
+    $("navigatorView").style.display = isNav ? "" : "none";
+    $("ridesView").style.display = isNav ? "none" : "";
+    $("tabNavigatorBtn").classList.toggle("active", isNav);
+    $("tabRidesBtn").classList.toggle("active", !isNav);
+    if (!isNav) {
+      ensureRidesViewInitialized();
+      renderRidesList();
+      showRideSelectionPage();
+      showRidesMsg(RIDES_MSG_DEFAULT, false);
+    }
+  }
+  $("tabNavigatorBtn").addEventListener("click", () => switchTab("navigator"));
+  $("tabRidesBtn").addEventListener("click", () => switchTab("rides"));
+
+  // ================= Rides: saved start/end/waypoint definitions =================
+  // A Ride is just a named {from, to, waypoints} triple, resolved through the same resolveLocation/
+  // fetchRoute/loadRoute pipeline the Navigator tab's address bar already uses — "Start" just
+  // populates fromPlace/toPlace/activeWaypoints and calls loadRoute(true), same as Resume does.
+  function persistRides() { storage.set(RIDES_STORAGE, JSON.stringify(rides)); }
+
+  function renderRidesList() {
+    const container = $("ridesList");
+    // Selection only makes sense for rides that still exist — drop any stale ids (e.g. a ride
+    // that was deleted while checked) before reflecting the checkbox states.
+    const validIds = new Set(rides.map((r) => r.id));
+    selectedRideIds.forEach((id) => { if (!validIds.has(id)) selectedRideIds.delete(id); });
+
+    if (!rides.length) {
+      container.innerHTML = '<p class="rides-empty">No saved Rides yet — click "+ Create a Ride" to plan one.</p>';
+      updateStartSessionBtn();
+      return;
+    }
+    container.innerHTML = "";
+    rides.forEach((ride) => {
+      const wpCount = (ride.waypoints || []).length;
+      const wpText = wpCount ? `, ${wpCount} waypoint${wpCount === 1 ? "" : "s"}` : "";
+      const card = document.createElement("div");
+      card.className = "ride-card";
+      card.innerHTML = `
+        <label class="ride-card-select" title="Include in a concurrent session"><input type="checkbox"></label>
+        <div class="ride-card-info">
+          <b>${escapeHtml(ride.name)}</b>
+          <span>${escapeHtml(ride.from.label)} &rarr; ${escapeHtml(ride.to.label)}${wpText}</span>
+        </div>
+        <div class="ride-card-actions">
+          <button class="btn primary small" data-action="start">Start</button>
+          <button class="btn ghost small" data-action="delete">Delete</button>
+        </div>`;
+      const cb = card.querySelector('input[type="checkbox"]');
+      cb.checked = selectedRideIds.has(ride.id);
+      cb.addEventListener("change", () => {
+        if (cb.checked) selectedRideIds.add(ride.id); else selectedRideIds.delete(ride.id);
+        updateStartSessionBtn();
+      });
+      card.querySelector('[data-action="start"]').addEventListener("click", () => startRide(ride));
+      card.querySelector('[data-action="delete"]').addEventListener("click", () => deleteRide(ride.id));
+      container.appendChild(card);
+    });
+    updateStartSessionBtn();
+  }
+
+  function updateStartSessionBtn() {
+    const n = selectedRideIds.size;
+    $("startSessionBtn").disabled = n === 0;
+    $("startSessionBtn").textContent = n > 1 ? `Start Session (${n})` : "Start Session";
+  }
+
+  function showRidesMsg(msg, isError) {
+    const el = $("ridesMsg");
+    el.textContent = msg;
+    el.classList.toggle("error", !!isError);
+  }
+  const RIDES_MSG_DEFAULT = "Check the box on 2 or more Rides to progress them together — swipe or use the arrows on the Navigator tab to switch between them while they all keep counting your distance.";
+
+  function startRide(ride) {
+    session = null;
+    fromPlace = ride.from;
+    toPlace = ride.to;
+    activeWaypoints = Array.isArray(ride.waypoints) ? ride.waypoints : [];
+    if (fromEl) fromEl.value = ride.from.label;
+    if (toEl) toEl.value = ride.to.label;
+    switchTab("navigator");
+    loadRoute(true);
+  }
+
+  $("startSessionBtn").addEventListener("click", async () => {
+    const chosen = rides.filter((r) => selectedRideIds.has(r.id));
+    if (!chosen.length) return;
+    $("startSessionBtn").disabled = true;
+    const prevLabel = $("startSessionBtn").textContent;
+    $("startSessionBtn").textContent = "Loading routes…";
+    showRidesMsg("Fetching routes for " + chosen.length + " Ride" + (chosen.length === 1 ? "" : "s") + "…", false);
+    try {
+      const entries = await Promise.all(chosen.map(async (ride) => {
+        const route = await fetchRoute(ride.from, ride.to, ride.waypoints || []);
+        const path = google.maps.geometry.encoding.decodePath(route.polyline.encodedPolyline);
+        const cum = buildPathIndex(path);
+        const totalM = route.distanceMeters || cum[cum.length - 1];
+        return { ride, path, cumDist: cum, totalDistanceM: totalM, hasArrived: false, cameraMode: "overview", hasStartedMoving: false };
+      }));
+      session = { entries, focusIndex: 0 };
+      fromPlace = null; toPlace = null; activeWaypoints = [];
+      distanceTravelledM = 0; lastTickTs = null; hasArrived = false; hasStartedMoving = false;
+      switchTab("navigator");
+      focusRide(0);
+      showRidesMsg(RIDES_MSG_DEFAULT, false);
+    } catch (e) {
+      showRidesMsg("Couldn't start that session: " + (e.message || e), true);
+    } finally {
+      $("startSessionBtn").disabled = selectedRideIds.size === 0;
+      updateStartSessionBtn();
+    }
+  });
+
+  // ---- Focus switching within a concurrent session ----
+  function focusRide(index) {
+    if (!session || index < 0 || index >= session.entries.length) return;
+    const outgoing = session.entries[session.focusIndex];
+    if (outgoing) {
+      // Remember how this Ride's camera/movement looked before swiping away, so swiping back
+      // resumes it rather than always dropping back to a fresh overview.
+      outgoing.cameraMode = cameraMode;
+      outgoing.hasStartedMoving = hasStartedMoving;
+      outgoing.hasArrived = hasArrived;
+    }
+    session.focusIndex = index;
+    const entry = session.entries[index];
+    routePath = entry.path;
+    cumDist = entry.cumDist;
+    totalDistanceM = entry.totalDistanceM;
+    hasArrived = entry.hasArrived;
+    renderRouteOnMap(entry.ride.from.label, entry.ride.to.label, { cameraMode: entry.cameraMode, hasStartedMoving: entry.hasStartedMoving });
+    lastTickTs = null; // avoid a dt spike attributing render/swipe time to distance on the next tick
+    updateNavUI();
+    updateRoutePanel();
+    $("routeMsg").textContent = `${entry.ride.name}: ${metersToDisplay(totalDistanceM)} total.`;
+    renderSessionStrip();
+  }
+  $("sessionPrevBtn").addEventListener("click", () => {
+    if (session) focusRide((session.focusIndex - 1 + session.entries.length) % session.entries.length);
+  });
+  $("sessionNextBtn").addEventListener("click", () => {
+    if (session) focusRide((session.focusIndex + 1) % session.entries.length);
+  });
+
+  // Renders the chip strip and decides whether it (vs. the plain address bar) is shown at all —
+  // the single source of truth for that visibility, called any time session state changes.
+  function renderSessionStrip() {
+    if (!session || session.entries.length <= 1) {
+      $("sessionStrip").style.display = "none";
+      $("routeBar").style.display = "";
+      return;
+    }
+    $("sessionStrip").style.display = "flex";
+    $("routeBar").style.display = "none";
+    const container = $("sessionChips");
+    container.innerHTML = "";
+    session.entries.forEach((entry, i) => {
+      const traveled = Math.min(distanceTravelledM, entry.totalDistanceM);
+      const pct = entry.totalDistanceM > 0 ? Math.round((traveled / entry.totalDistanceM) * 100) : 0;
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "session-chip" + (i === session.focusIndex ? " active" : "") + (entry.hasArrived ? " arrived" : "");
+      chip.innerHTML = `
+        <span class="session-chip-name">${escapeHtml(entry.ride.name)}</span>
+        <span class="session-chip-pct">${entry.hasArrived ? "Arrived" : pct + "%"}</span>
+        <span class="session-chip-bar"><span style="width:${pct}%"></span></span>`;
+      chip.addEventListener("click", () => focusRide(i));
+      container.appendChild(chip);
+    });
+  }
+
+  function deleteRide(id) {
+    rides = rides.filter((r) => r.id !== id);
+    selectedRideIds.delete(id);
+    persistRides();
+    renderRidesList();
+  }
+
+  // ---- Create a Ride ----
+  function ensureRidesViewInitialized() {
+    if (ridesViewInitialized) return;
+    if (!window.google || !google.maps || !google.maps.places) {
+      // Maps hasn't loaded yet (key overlay still open, or still loading) — the rides list itself
+      // doesn't need Maps, but address search and the waypoint map do, so gate creation on it.
+      $("createRideBtn").disabled = true;
+      return;
+    }
+    ridesViewInitialized = true;
+    $("createRideBtn").disabled = false;
+
+    rideFromEl = new google.maps.places.PlaceAutocompleteElement();
+    rideFromEl.placeholder = "Start address";
+    $("rideFromInputWrap").appendChild(rideFromEl);
+    rideFromEl.addEventListener("gmp-select", async ({ placePrediction }) => {
+      const place = placePrediction.toPlace();
+      await place.fetchFields({ fields: ["location", "formattedAddress"] });
+      if (place.location) rideFromPlace = { lat: place.location.lat(), lng: place.location.lng(), label: place.formattedAddress };
+    });
+    rideFromEl.addEventListener("input", () => { rideFromPlace = null; });
+
+    rideToEl = new google.maps.places.PlaceAutocompleteElement();
+    rideToEl.placeholder = "Destination address";
+    $("rideToInputWrap").appendChild(rideToEl);
+    rideToEl.addEventListener("gmp-select", async ({ placePrediction }) => {
+      const place = placePrediction.toPlace();
+      await place.fetchFields({ fields: ["location", "formattedAddress"] });
+      if (place.location) rideToPlace = { lat: place.location.lat(), lng: place.location.lng(), label: place.formattedAddress };
+    });
+    rideToEl.addEventListener("input", () => { rideToPlace = null; });
+  }
+
+  function showRideSelectionPage() {
+    $("rideSelectionPage").style.display = "";
+    $("createRidePage").style.display = "none";
+  }
+  function showCreateRidePage() {
+    $("rideSelectionPage").style.display = "none";
+    $("createRidePage").style.display = "";
+    // The map has to be created (or resized) only once its container is actually visible — building
+    // a google.maps.Map inside a display:none element gives it a 0x0 viewport it never recovers from.
+    if (!createRideMap) {
+      initCreateRideMap();
+    } else {
+      google.maps.event.trigger(createRideMap, "resize");
+      if (map) createRideMap.setCenter(map.getCenter());
+    }
+  }
+  $("createRideBtn").addEventListener("click", showCreateRidePage);
+  $("cancelRideBtn").addEventListener("click", () => { resetCreateRideForm(); showRideSelectionPage(); });
+
+  function initCreateRideMap() {
+    const center = map ? map.getCenter() : null;
+    const mapOpts = {
+      center: center ? { lat: center.lat(), lng: center.lng() } : initialMapCenter(),
+      zoom: map ? map.getZoom() : 12,
+      mapTypeId: "roadmap", streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
+      clickableIcons: false,
+    };
+    if (mapId) mapOpts.mapId = mapId;
+    createRideMap = new google.maps.Map($("createRideMap"), mapOpts);
+    createRideMap.addListener("click", (e) => addWaypoint(e.latLng.lat(), e.latLng.lng()));
+  }
+
+  function waypointLabel(i) { return { text: String(i + 1), color: "#ffffff", fontSize: "11px", fontWeight: "700" }; }
+
+  function addWaypoint(lat, lng) {
+    const idx = currentRideWaypoints.length;
+    const marker = new google.maps.Marker({
+      position: { lat, lng }, map: createRideMap, draggable: true,
+      label: waypointLabel(idx),
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 11, fillColor: "#4a3aa7", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 },
+      title: `Waypoint ${idx + 1} — drag to adjust, click to remove`,
+    });
+    const entry = { lat, lng, marker };
+    marker.addListener("dragend", () => {
+      const pos = marker.getPosition();
+      entry.lat = pos.lat(); entry.lng = pos.lng();
+    });
+    marker.addListener("click", () => removeWaypointByEntry(entry));
+    currentRideWaypoints.push(entry);
+    renderWaypointList();
+  }
+
+  function removeWaypointByEntry(entry) {
+    const idx = currentRideWaypoints.indexOf(entry);
+    if (idx === -1) return;
+    entry.marker.setMap(null);
+    currentRideWaypoints.splice(idx, 1);
+    // Relabel the remaining markers so numbering always reflects current route order (1..N).
+    currentRideWaypoints.forEach((w, i) => {
+      w.marker.setLabel(waypointLabel(i));
+      w.marker.setTitle(`Waypoint ${i + 1} — drag to adjust, click to remove`);
+    });
+    renderWaypointList();
+  }
+
+  function clearAllWaypoints() {
+    currentRideWaypoints.forEach((w) => w.marker.setMap(null));
+    currentRideWaypoints = [];
+    renderWaypointList();
+  }
+
+  function renderWaypointList() {
+    const el = $("waypointList");
+    if (!currentRideWaypoints.length) {
+      el.innerHTML = '<p class="waypoint-empty">No waypoints yet — click the map above to add one.</p>';
+      return;
+    }
+    el.innerHTML = "";
+    currentRideWaypoints.forEach((w, i) => {
+      const row = document.createElement("div");
+      row.className = "waypoint-row";
+      row.innerHTML = `<span>Waypoint ${i + 1} &mdash; ${w.lat.toFixed(4)}, ${w.lng.toFixed(4)}</span>`;
+      const btn = document.createElement("button");
+      btn.className = "btn ghost small";
+      btn.textContent = "Remove";
+      btn.addEventListener("click", () => removeWaypointByEntry(w));
+      row.appendChild(btn);
+      el.appendChild(row);
+    });
+  }
+
+  function showCreateRideError(msg) {
+    const el = $("createRideMsg");
+    el.textContent = msg;
+    el.classList.add("error");
+  }
+  function resetCreateRideForm() {
+    $("rideNameInput").value = "";
+    if (rideFromEl) rideFromEl.value = "";
+    if (rideToEl) rideToEl.value = "";
+    rideFromPlace = null; rideToPlace = null;
+    clearAllWaypoints();
+    const el = $("createRideMsg");
+    el.textContent = "";
+    el.classList.remove("error");
+  }
+
+  $("saveRideBtn").addEventListener("click", async () => {
+    const name = $("rideNameInput").value.trim();
+    const msgEl = $("createRideMsg");
+    msgEl.classList.remove("error");
+    if (!name) { showCreateRideError("Give this Ride a name first."); return; }
+    if (!rideFromEl || !rideToEl) { showCreateRideError("Maps hasn't finished loading yet — try again in a moment."); return; }
+    $("saveRideBtn").disabled = true;
+    try {
+      msgEl.classList.remove("error");
+      msgEl.textContent = "Looking up addresses…";
+      const origin = await resolveLocation(rideFromEl, rideFromPlace);
+      const destination = await resolveLocation(rideToEl, rideToPlace);
+      rideFromPlace = origin; rideToPlace = destination;
+      const ride = {
+        id: "ride_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+        name,
+        from: origin,
+        to: destination,
+        waypoints: currentRideWaypoints.map((w) => ({ lat: w.lat, lng: w.lng })),
+        createdAt: Date.now(),
+      };
+      rides.push(ride);
+      persistRides();
+      resetCreateRideForm();
+      renderRidesList();
+      showRideSelectionPage();
+    } catch (e) {
+      showCreateRideError(e.message || String(e));
+    } finally {
+      $("saveRideBtn").disabled = false;
+    }
+  });
+
+  // ---------------- Progress engine ----------------
+  let distanceTravelledM = 0;
+  let lastTickTs = null;
+  let lastPower = null, lastCadence = null, lastHr = null, lastFtmsSpeedMps = null;
+  let hasArrived = false;
+
+  const LB_TO_KG = 0.45359237;
+  const BIKE_WEIGHT_LBS = 158.3; // VeloCore 22 spec weight — fixed, not user-facing (its effect on the
+                                  // estimate is under 1% across the whole power range, not worth asking about).
+  function solveSpeedFromPower(powerW) {
+    // Simple outdoor-cycling physics model: P = eff * v * (Crr*m*g + 0.5*rho*CdA*v^2)
+    if (!powerW || powerW <= 0) return 0;
+    const riderLbs = parseFloat($("weightInput").value) || 180;
+    const totalLbs = riderLbs + BIKE_WEIGHT_LBS;
+    const m = totalLbs * LB_TO_KG;
+    const g = 9.8067, Crr = 0.004, rho = 1.225, CdA = 0.36, eff = 0.97;
+    let v = 6;
+    for (let i = 0; i < 20; i++) {
+      const f = eff * v * (Crr * m * g + 0.5 * rho * CdA * v * v) - powerW;
+      const fPrime = eff * (Crr * m * g + 1.5 * rho * CdA * v * v);
+      if (fPrime === 0) break;
+      const vNext = v - f / fPrime;
+      if (!isFinite(vNext) || vNext < 0) break;
+      v = vNext;
+    }
+    return Math.max(0, v);
+  }
+
+  function tick() {
+    const now = performance.now();
+    if (lastTickTs === null) { lastTickTs = now; return; }
+    const dt = (now - lastTickTs) / 1000;
+    lastTickTs = now;
+    if (!routePath.length || dt <= 0) return;
+
+    const speedMps = lastFtmsSpeedMps !== null ? lastFtmsSpeedMps : solveSpeedFromPower(lastPower);
+    const prevDistance = distanceTravelledM;
+    // Not capped at totalDistanceM here — during a concurrent session, totalDistanceM is whichever
+    // Ride happens to be focused right now, and capping the shared odometer to it would silently
+    // stall every OTHER Ride's progress too. Every display that reads distanceTravelledM already
+    // clamps itself against its own route's length (pointAtDistance, the remaining-distance math
+    // below, updateRoutePanel), so leaving the raw odometer uncapped here is safe.
+    distanceTravelledM = distanceTravelledM + speedMps * dt;
+
+    // Overview on load, auto-switch to the chase view the moment pedaling actually starts —
+    // mirrors the mobile app's "starts on overview, drops into nav view once you're moving" behavior.
+    if (!hasStartedMoving && distanceTravelledM > prevDistance && $("followToggle").checked) {
+      hasStartedMoving = true;
+      setCameraTarget("chase");
+    }
+    if (cameraMode === "chase") updateChaseTarget();
+
+    updateNavUI(speedMps);
+    if (distanceTravelledM > 0 && distanceTravelledM < totalDistanceM) saveResumeState();
+
+    if (session) {
+      const focused = session.entries[session.focusIndex];
+      if (focused) { focused.hasArrived = hasArrived; focused.cameraMode = cameraMode; focused.hasStartedMoving = hasStartedMoving; }
+      // Every other Ride in the session keeps accumulating against the same shared odometer even
+      // though it isn't the one on screen — this is what makes "concurrent" mean something.
+      session.entries.forEach((entry, i) => {
+        if (i === session.focusIndex) return;
+        const wasArrived = entry.hasArrived;
+        entry.hasArrived = distanceTravelledM >= entry.totalDistanceM - 1;
+        if (entry.hasArrived && !wasArrived) {
+          speak(`You have arrived at ${entry.ride.name}.`);
+          logLine(`Arrived at "${entry.ride.name}" (background Ride in this session).`);
+        }
+      });
+      renderSessionStrip();
+    }
+  }
+  setInterval(tick, 1000);
+
+  function updateNavUI(speedMps) {
+    $("statPower").textContent = lastPower === null ? "—" : Math.round(lastPower);
+    $("statCadence").textContent = lastCadence === null ? "—" : Math.round(lastCadence);
+    $("statSpeed").textContent = speedMps ? mpsToSpeedDisplay(speedMps) : "—";
+    $("statDist").textContent = routePath.length ? metersToDisplay(distanceTravelledM) : "0.0";
+
+    const sourceNote = $("sourceNote");
+    if (lastFtmsSpeedMps !== null) {
+      $("lblSpeed").textContent = "Speed (bike)"; $("lblDist").textContent = "Traveled (bike)";
+      sourceNote.textContent = "Distance is coming directly from your bike's reported speed.";
+      sourceNote.style.display = routePath.length ? "block" : "none";
+    } else if (lastPower !== null) {
+      $("lblSpeed").textContent = "Speed (est.)"; $("lblDist").textContent = "Traveled (est.)";
+      sourceNote.textContent = "Your bike doesn't report speed directly, so distance is estimated from your power output (physics model) — not a precise measurement.";
+      sourceNote.style.display = routePath.length ? "block" : "none";
+    } else {
+      $("lblSpeed").textContent = "Speed"; $("lblDist").textContent = "Traveled";
+      sourceNote.style.display = "none";
+    }
+
+    if (!routePath.length) return;
+
+    const { pos, heading } = pointAtDistance(routePath, cumDist, distanceTravelledM);
+    if (bikeMarker) {
+      bikeMarker.setPosition(pos);
+      const icon = bikeMarker.getIcon();
+      icon.rotation = heading;
+      bikeMarker.setIcon(icon);
+      // Camera movement itself is handled by the animateCamera() rAF loop (see setCameraTarget /
+      // updateChaseTarget) — it smoothly chases whatever targetCam is currently set to.
+    }
+    updateRoutePanel();
+
+    const remaining = Math.max(0, totalDistanceM - distanceTravelledM);
+    $("statRemain").textContent = metersToDisplay(remaining);
+    if (speedMps && speedMps > 0.3) {
+      const etaMin = remaining / speedMps / 60;
+      $("statEta").textContent = etaMin < 1 ? "<1 min" : Math.round(etaMin) + " min";
+    } else {
+      $("statEta").textContent = "—";
+    }
+
+    if (distanceTravelledM >= totalDistanceM - 1) {
+      if (!hasArrived) {
+        hasArrived = true;
+        $("routeMsg").textContent = "You have arrived at your destination.";
+        speak("You have arrived at your destination.");
+        storage.remove(RESUME_STORAGE);
+        setCameraTarget("overview");
+      }
+    } else {
+      hasArrived = false;
+    }
+  }
+
+  function speak(text) {
+    if (!$("voiceToggle").checked) return;
+    if (!("speechSynthesis" in window)) return;
+    try { window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch (e) {}
+  }
+
+  $("testPowerInput").addEventListener("input", () => {
+    const v = parseFloat($("testPowerInput").value);
+    if (!isNaN(v) && v > 0) { lastPower = v; lastFtmsSpeedMps = null; }
+  });
+
+  // ---------------- BLE (same protocols as the live dashboard) ----------------
+  const hasBluetooth = !!(navigator.bluetooth);
+  if (!hasBluetooth) {
+    $("statusLabel").textContent = "Web Bluetooth unavailable in this browser — map & route search still work";
+    ["connectBikeBtn","connectAllBtn","exploreBtn"].forEach(id => { const b = $(id); if (b) b.disabled = true; });
+  }
+
+  function setStatus(kind, text) {
+    $("statusDot").className = "status-dot" + (kind ? " " + kind : "");
+    $("statusLabel").textContent = text;
+  }
+
+  const sensorStates = {};
+  function parseCyclingPower(dv, s) {
+    try {
+      const flags = dv.getUint16(0, true); let offset = 2;
+      const power = dv.getInt16(offset, true); offset += 2;
+      if (flags & 0x1) offset += 1;
+      if (flags & 0x4) offset += 2;
+      if (flags & 0x10) offset += 6;
+      let cadence = null;
+      if (flags & 0x20) {
+        const cum = dv.getUint16(offset, true), evt = dv.getUint16(offset + 2, true); offset += 4;
+        if (s.prevCrank) {
+          const dRev = (cum - s.prevCrank.cum) & 0xFFFF;
+          const dTime = ((evt - s.prevCrank.evt) & 0xFFFF) / 1024;
+          if (dTime > 0) cadence = (dRev / dTime) * 60;
+        }
+        s.prevCrank = { cum, evt };
+      }
+      return { power, cadence };
+    } catch (e) { return {}; }
+  }
+  function parseCSC(dv, s) {
+    try {
+      const flags = dv.getUint8(0); let offset = 1;
+      if (flags & 0x1) offset += 6;
+      let cadence = null;
+      if (flags & 0x2) {
+        const cum = dv.getUint16(offset, true), evt = dv.getUint16(offset + 2, true); offset += 4;
+        if (s.prevCrank) {
+          const dRev = (cum - s.prevCrank.cum) & 0xFFFF;
+          const dTime = ((evt - s.prevCrank.evt) & 0xFFFF) / 1024;
+          if (dTime > 0) cadence = (dRev / dTime) * 60;
+        }
+        s.prevCrank = { cum, evt };
+      }
+      return { cadence };
+    } catch (e) { return {}; }
+  }
+  function parseHeartRate(dv) {
+    try { const flags = dv.getUint8(0); return { hr: (flags & 0x1) ? dv.getUint16(1, true) : dv.getUint8(1) }; }
+    catch (e) { return {}; }
+  }
+  function parseIndoorBikeData(dv) {
+    try {
+      const flags = dv.getUint16(0, true); let offset = 2;
+      const bit = (n) => !!(flags & (1 << n));
+      let power = null, cadence = null, hr = null, speedMps = null;
+      if (!bit(0)) { speedMps = dv.getUint16(offset, true) * 0.01 / 3.6; offset += 2; }
+      if (bit(1)) offset += 2;
+      if (bit(2)) { cadence = dv.getUint16(offset, true) * 0.5; offset += 2; }
+      if (bit(3)) offset += 2;
+      if (bit(4)) offset += 3;
+      if (bit(5)) offset += 2;
+      if (bit(6)) { power = dv.getInt16(offset, true); offset += 2; }
+      if (bit(7)) offset += 2;
+      if (bit(8)) offset += 5;
+      if (bit(9)) { hr = dv.getUint8(offset); offset += 1; }
+      return { power, cadence, hr, speedMps };
+    } catch (e) { return {}; }
+  }
+
+  function applyReading(r) {
+    if (r.power !== undefined && r.power !== null) lastPower = r.power;
+    if (r.cadence !== undefined && r.cadence !== null) lastCadence = r.cadence;
+    if (r.hr !== undefined && r.hr !== null) lastHr = r.hr;
+    if (r.speedMps !== undefined && r.speedMps !== null) lastFtmsSpeedMps = r.speedMps;
+  }
+
+  async function subscribeCharacteristic(server, serviceName, charUUID, handler, label) {
+    try {
+      const service = await server.getPrimaryService(serviceName);
+      const char = await service.getCharacteristic(charUUID);
+      await char.startNotifications();
+      char.addEventListener("characteristicvaluechanged", (ev) => handler(ev.target.value));
+      logLine("Subscribed to " + label);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  async function connectBikeDevice(device) {
+    let attempt = 0, manuallyDisconnected = false;
+    async function doConnect() {
+      setStatus("reconnecting", "Connecting to " + (device.name || "device") + "…");
+      try {
+        const server = await device.gatt.connect();
+        let any = false;
+        sensorStates.power = sensorStates.power || {};
+        if (await subscribeCharacteristic(server, "cycling_power", "00002a63-0000-1000-8000-00805f9b34fb", (dv) => applyReading(parseCyclingPower(dv, sensorStates.power)), "Cycling Power")) any = true;
+        sensorStates.csc = sensorStates.csc || {};
+        if (await subscribeCharacteristic(server, "cycling_speed_and_cadence", "00002a5b-0000-1000-8000-00805f9b34fb", (dv) => applyReading(parseCSC(dv, sensorStates.csc)), "Speed & Cadence")) any = true;
+        if (await subscribeCharacteristic(server, "fitness_machine", "00002ad2-0000-1000-8000-00805f9b34fb", (dv) => applyReading(parseIndoorBikeData(dv)), "FTMS Indoor Bike Data")) any = true;
+        if (await subscribeCharacteristic(server, "heart_rate", "00002a37-0000-1000-8000-00805f9b34fb", (dv) => applyReading(parseHeartRate(dv)), "Heart Rate")) any = true;
+        if (!any) { setStatus("error", "Connected, but no known fitness service found — try the explorer below"); return; }
+        attempt = 0;
+        setStatus("connected", "Connected to " + (device.name || "bike"));
+      } catch (e) {
+        setStatus("error", "Couldn't connect: " + (e.message || e));
+      }
+    }
+    device.addEventListener("gattserverdisconnected", () => {
+      if (manuallyDisconnected) return;
+      attempt++;
+      const delay = Math.min(10000, 1000 * Math.pow(1.6, attempt));
+      setStatus("reconnecting", "Disconnected — reconnecting (attempt " + attempt + ")…");
+      logLine("Disconnected. Retrying in " + Math.round(delay/1000) + "s");
+      setTimeout(doConnect, delay);
+    });
+    await doConnect();
+  }
+
+  $("connectBikeBtn").addEventListener("click", async () => {
+    try {
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: ["cycling_power"] }, { services: ["cycling_speed_and_cadence"] }, { services: ["fitness_machine"] }],
+        optionalServices: ["cycling_power", "cycling_speed_and_cadence", "fitness_machine", "heart_rate", "battery_service", "device_information"],
+      });
+      logLine("Selected: " + (device.name || "(unnamed)"));
+      connectBikeDevice(device);
+    } catch (e) { if (e.name !== "NotFoundError") setStatus("error", "Bluetooth error: " + (e.message || e)); }
+  });
+  $("connectAllBtn").addEventListener("click", async () => {
+    try {
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: ["cycling_power", "cycling_speed_and_cadence", "fitness_machine", "heart_rate", "battery_service", "device_information"],
+      });
+      logLine("Selected: " + (device.name || "(unnamed)"));
+      connectBikeDevice(device);
+    } catch (e) { if (e.name !== "NotFoundError") setStatus("error", "Bluetooth error: " + (e.message || e)); }
+  });
+
+  $("exploreBtn").addEventListener("click", async () => {
+    $("serviceList").innerHTML = "";
+    try {
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: ["cycling_power", "cycling_speed_and_cadence", "fitness_machine", "heart_rate", "battery_service", "device_information"],
+      });
+      logLine("Exploring: " + (device.name || "(unnamed)"));
+      const server = await device.gatt.connect();
+      const services = await server.getPrimaryServices();
+      for (const svc of services) {
+        const block = document.createElement("div");
+        block.style.cssText = "border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px;";
+        block.innerHTML = `<div style="font-weight:600;font-family:ui-monospace,monospace;">${svc.uuid}</div>`;
+        try {
+          const chars = await svc.getCharacteristics();
+          for (const ch of chars) {
+            const props = Object.entries(ch.properties).filter(([k,v]) => v).map(([k]) => k).join(", ");
+            const row = document.createElement("div");
+            row.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-top:1px solid var(--gridline);font-family:ui-monospace,monospace;font-size:11px;";
+            row.innerHTML = `<span>${ch.uuid}</span><span>${props}</span>`;
+            if (ch.properties.notify) {
+              const b = document.createElement("button");
+              b.className = "btn small"; b.textContent = "Subscribe";
+              b.addEventListener("click", async () => {
+                try {
+                  await ch.startNotifications();
+                  ch.addEventListener("characteristicvaluechanged", (ev) => logLine(svc.uuid.slice(0,8) + "/" + ch.uuid.slice(0,8) + ": " + toHex(ev.target.value)));
+                  b.textContent = "Subscribed"; b.disabled = true;
+                } catch (e) { logLine("Subscribe failed: " + (e.message||e)); }
+              });
+              row.appendChild(b);
+            }
+            block.appendChild(row);
+          }
+        } catch (e) { block.innerHTML += `<div style="font-size:11px;">Couldn't list characteristics: ${e.message||e}</div>`; }
+        $("serviceList").appendChild(block);
+      }
+    } catch (e) { if (e.name !== "NotFoundError") logLine("Explorer error: " + (e.message||e)); }
+  });
+})();
+</script>
+</body>
+</html>
